@@ -107,6 +107,7 @@
 .mseo-badge--success  { background: #dcfce7; color: #166534; }
 .mseo-badge--danger   { background: #fee2e2; color: #991b1b; }
 .mseo-badge--warning  { background: #fef3c7; color: #92400e; }
+.mseo-badge--restricted { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
 .mseo-badge--internal { background: #dbeafe; color: #1e40af; }
 .mseo-badge--external { background: #f3e8ff; color: #6b21a8; }
 
@@ -283,15 +284,18 @@
 .mseo-table--compact th,
 .mseo-table--compact td { padding: 8px 12px; }
 
-.mseo-row--broken { background: #fff5f5 !important; }
+.mseo-row--broken      { background: #fff5f5 !important; }
 .mseo-row--broken:hover { background: #fee2e2 !important; }
+.mseo-row--restricted      { background: #fff7ed !important; }
+.mseo-row--restricted:hover { background: #ffedd5 !important; }
 
 .mseo-cell--url { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Link styles ─────────────────────────────────────────────────── */
 .mseo-link { color: var(--mseo-primary); text-decoration: none; }
 .mseo-link:hover { text-decoration: underline; }
-.mseo-link--broken { color: var(--mseo-danger); }
+.mseo-link--broken     { color: var(--mseo-danger); }
+.mseo-link--restricted { color: var(--mseo-orange); }
 
 /* ── Issue badges in table ───────────────────────────────────────── */
 .mseo-issue { display: inline-block; margin: 2px; }
@@ -404,6 +408,22 @@
 }
 .mseo-info-banner svg { width: 20px; height: 20px; fill: var(--mseo-blue); flex-shrink: 0; margin-top: 1px; }
 .mseo-info-banner a { color: var(--mseo-primary); }
+
+/* ── Link checker legend ─────────────────────────────────────────── */
+.mseo-legend {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: var(--mseo-surface);
+  border: 1px solid var(--mseo-border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--mseo-muted);
+}
+.mseo-legend__item { display: flex; align-items: center; gap: 8px; }
+.mseo-hint-inline  { color: var(--mseo-muted); font-size: 12.5px; }
 
 /* ── Cannibalization groups ───────────────────────────────────────── */
 .mseo-can-group {

@@ -1,6 +1,6 @@
 <?php defined( 'ABSPATH' ) || exit;
 $summary = MerdusSEO_Link_Checker::summary();
-$results = MerdusSEO_Link_Checker::get_results();
+$results = MerdusSEO_Link_Checker::get_results( 'problems' );
 ?>
 <div class="mseo-wrap">
 	<?php include __DIR__ . '/partials/header.php'; ?>
@@ -8,7 +8,10 @@ $results = MerdusSEO_Link_Checker::get_results();
 	<div class="mseo-body">
 		<div class="mseo-page-title">
 			<h1>Kırık Link Tarayıcı</h1>
-			<p class="mseo-subtitle">Site içindeki tüm iç ve dış linkleri kontrol edin</p>
+			<p class="mseo-subtitle">
+				Yalnızca sorunlu linkler gösterilir.
+				<span class="mseo-hint-inline">WP-Admin, javascript: ve benzeri sistem linkleri otomatik atlanır.</span>
+			</p>
 		</div>
 
 		<!-- Toolbar -->
@@ -27,45 +30,54 @@ $results = MerdusSEO_Link_Checker::get_results();
 
 			<div class="mseo-toolbar__filters">
 				<select id="link-filter" class="mseo-select">
-					<option value="">Tümü</option>
-					<option value="broken">Kırık</option>
-					<option value="internal">İç Link</option>
-					<option value="external">Dış Link</option>
+					<option value="">Tüm Sorunlar</option>
+					<option value="broken">Yalnızca Kırık (4xx/5xx)</option>
+					<option value="restricted">Yalnızca Kısıtlı (403)</option>
+					<option value="internal">İç Linkler</option>
+					<option value="external">Dış Linkler</option>
 				</select>
 				<input type="text" id="link-search" class="mseo-input" placeholder="URL veya kaynak ara...">
 			</div>
 		</div>
 
 		<!-- Summary bar -->
-		<?php if ( $summary['total'] > 0 ) : ?>
+		<?php if ( $summary['problems'] > 0 || $summary['total'] > 0 ) : ?>
 		<div class="mseo-summary-bar">
-			<div class="mseo-summary-item mseo-summary-item--ok">
-				<span class="mseo-summary-item__value"><?php echo esc_html( $summary['ok'] ); ?></span>
-				<span class="mseo-summary-item__label">Aktif</span>
-			</div>
 			<div class="mseo-summary-item mseo-summary-item--danger">
 				<span class="mseo-summary-item__value"><?php echo esc_html( $summary['broken'] ); ?></span>
-				<span class="mseo-summary-item__label">Kırık</span>
+				<span class="mseo-summary-item__label">Kırık Link</span>
+			</div>
+			<div class="mseo-summary-item mseo-summary-item--warning">
+				<span class="mseo-summary-item__value"><?php echo esc_html( $summary['restricted'] ); ?></span>
+				<span class="mseo-summary-item__label">Kısıtlı (403)</span>
 			</div>
 			<div class="mseo-summary-item">
 				<span class="mseo-summary-item__value"><?php echo esc_html( $summary['internal'] ); ?></span>
-				<span class="mseo-summary-item__label">İç Link</span>
+				<span class="mseo-summary-item__label">Sorunlu İç</span>
 			</div>
 			<div class="mseo-summary-item">
 				<span class="mseo-summary-item__value"><?php echo esc_html( $summary['external'] ); ?></span>
-				<span class="mseo-summary-item__label">Dış Link</span>
+				<span class="mseo-summary-item__label">Sorunlu Dış</span>
 			</div>
-			<div class="mseo-summary-item">
-				<span class="mseo-summary-item__value"><?php echo esc_html( $summary['total'] ); ?></span>
-				<span class="mseo-summary-item__label">Toplam</span>
-			</div>
+		</div>
+
+		<!-- Legend -->
+		<div class="mseo-legend">
+			<span class="mseo-legend__item">
+				<span class="mseo-badge mseo-badge--danger">404 / 5xx / Timeout</span>
+				Kırık — kaldırılabilir
+			</span>
+			<span class="mseo-legend__item">
+				<span class="mseo-badge mseo-badge--restricted">403</span>
+				Kısıtlı — karşı taraf erişime izin vermiyor, kırık olmayabilir
+			</span>
 		</div>
 		<?php endif; ?>
 
 		<!-- Progress -->
 		<div class="mseo-progress" id="link-progress" style="display:none">
 			<div class="mseo-progress__bar"><div class="mseo-progress__fill mseo-progress__fill--animated"></div></div>
-			<p>Linkler kontrol ediliyor, bu işlem birkaç dakika sürebilir...</p>
+			<p>Linkler kontrol ediliyor — bu işlem site büyüklüğüne bağlı olarak birkaç dakika sürebilir...</p>
 		</div>
 
 		<!-- Table -->
@@ -83,34 +95,43 @@ $results = MerdusSEO_Link_Checker::get_results();
 					</tr>
 				</thead>
 				<tbody id="link-table-body">
-				<?php foreach ( $results as $row ) : ?>
-					<tr class="mseo-row <?php echo $row['is_broken'] ? 'mseo-row--broken' : ''; ?>"
+				<?php foreach ( $results as $row ) :
+					$stype = $row['status_type'] ?? MerdusSEO_Link_Checker::get_status_type( (int) $row['http_status'] );
+				?>
+					<tr class="mseo-row mseo-row--<?php echo esc_attr( $stype ); ?>"
 					    data-type="<?php echo esc_attr( $row['link_type'] ); ?>"
-					    data-broken="<?php echo esc_attr( $row['is_broken'] ); ?>"
+					    data-status="<?php echo esc_attr( $stype ); ?>"
 					    data-source="<?php echo esc_attr( strtolower( $row['source_url'] ) ); ?>"
 					    data-url="<?php echo esc_attr( strtolower( $row['link_url'] ) ); ?>">
 						<td>
 							<a href="<?php echo esc_url( $row['source_url'] ); ?>" target="_blank" class="mseo-link">
-								<?php echo esc_html( wp_trim_words( $row['source_url'], 5 ) ); ?>
+								<?php echo esc_html( mb_substr( $row['source_url'], 0, 55 ) ); ?>
 							</a>
 						</td>
 						<td class="mseo-cell--url">
-							<a href="<?php echo esc_url( $row['link_url'] ); ?>" target="_blank" class="mseo-link <?php echo $row['is_broken'] ? 'mseo-link--broken' : ''; ?>">
+							<a href="<?php echo esc_url( $row['link_url'] ); ?>" target="_blank"
+							   class="mseo-link <?php echo $stype === 'broken' ? 'mseo-link--broken' : ( $stype === 'restricted' ? 'mseo-link--restricted' : '' ); ?>">
 								<?php echo esc_html( mb_substr( $row['link_url'], 0, 60 ) ); ?>
 							</a>
 						</td>
 						<td><?php echo esc_html( $row['anchor_text'] ?: '—' ); ?></td>
 						<td>
-							<span class="mseo-badge mseo-badge--<?php echo esc_attr( $row['link_type'] ); ?>">
+							<span class="mseo-badge mseo-badge--<?php echo $row['link_type'] === 'internal' ? 'internal' : 'external'; ?>">
 								<?php echo $row['link_type'] === 'internal' ? 'İç' : 'Dış'; ?>
 							</span>
 						</td>
 						<td>
-							<span class="mseo-badge <?php echo $row['is_broken'] ? 'mseo-badge--danger' : 'mseo-badge--success'; ?>">
-								<?php echo $row['http_status'] === 0 ? 'Zaman Aşımı' : esc_html( $row['http_status'] ); ?>
-							</span>
+							<?php if ( $stype === 'broken' ) : ?>
+								<span class="mseo-badge mseo-badge--danger">
+									<?php echo $row['http_status'] === '0' || $row['http_status'] === 0 ? 'Timeout' : esc_html( $row['http_status'] ); ?>
+								</span>
+							<?php elseif ( $stype === 'restricted' ) : ?>
+								<span class="mseo-badge mseo-badge--restricted">403 Kısıtlı</span>
+							<?php else : ?>
+								<span class="mseo-badge mseo-badge--success"><?php echo esc_html( $row['http_status'] ); ?></span>
+							<?php endif; ?>
 						</td>
-						<td><?php echo esc_html( $row['last_checked'] ); ?></td>
+						<td style="white-space:nowrap;font-size:12px"><?php echo esc_html( substr( $row['last_checked'], 0, 16 ) ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>
@@ -119,8 +140,13 @@ $results = MerdusSEO_Link_Checker::get_results();
 		<?php else : ?>
 		<div class="mseo-empty" id="link-empty">
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
-			<h3>Henüz link taraması yapılmadı</h3>
-			<p>"Tüm Linkleri Tara" butonuna tıklayarak taramayı başlatın.</p>
+			<?php if ( $summary['total'] > 0 ) : ?>
+				<h3>Sorunlu link bulunamadı</h3>
+				<p>Tüm linkler sağlıklı görünüyor. Yeni bir tarama için butona basın.</p>
+			<?php else : ?>
+				<h3>Henüz link taraması yapılmadı</h3>
+				<p>"Tüm Linkleri Tara" butonuna tıklayarak taramayı başlatın.</p>
+			<?php endif; ?>
 		</div>
 		<?php endif; ?>
 	</div>

@@ -342,14 +342,15 @@
     $('#link-table-body tr').each(function () {
       const $tr    = $(this);
       const type   = $tr.data('type');
-      const broken = $tr.data('broken');
+      const status = $tr.data('status'); /* 'broken' | 'restricted' */
       const src    = $tr.data('source') || '';
       const url    = $tr.data('url') || '';
 
       let matchF = true;
-      if (filter === 'broken')   matchF = broken == 1;
-      if (filter === 'internal') matchF = type === 'internal';
-      if (filter === 'external') matchF = type === 'external';
+      if (filter === 'broken')     matchF = status === 'broken';
+      if (filter === 'restricted') matchF = status === 'restricted';
+      if (filter === 'internal')   matchF = type === 'internal';
+      if (filter === 'external')   matchF = type === 'external';
 
       const matchS = !search || src.includes(search) || url.includes(search);
       $tr.toggle(matchF && matchS);
