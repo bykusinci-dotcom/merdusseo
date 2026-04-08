@@ -29,24 +29,39 @@ class MerdusSEO_Meta_Analyzer {
 			$title_len = mb_strlen( strip_tags( $meta_title ) );
 			$desc_len  = mb_strlen( strip_tags( $meta_desc ) );
 
+			/*
+			 * When AIOSEO v4 is active and a post has NO custom title/description
+			 * override in aioseo_posts (it's using the global default template),
+			 * we skip length warnings — the auto-generated value is intentional.
+			 * We still flag genuinely empty values.
+			 */
+			$aioseo_row      = self::$aioseo_table_exists ? self::get_aioseo_row( $post->ID ) : null;
+			$title_is_auto   = self::$aioseo_table_exists && ( ! $aioseo_row || empty( $aioseo_row->title ) );
+			$desc_is_auto    = self::$aioseo_table_exists && ( ! $aioseo_row || empty( $aioseo_row->description ) );
+
 			$issues = [];
 
 			/* Meta Title checks */
 			if ( empty( $meta_title ) ) {
 				$issues[] = 'missing_title';
-			} elseif ( $title_len > $title_max ) {
-				$issues[] = 'long_title';
-			} elseif ( $title_len < $title_min ) {
-				$issues[] = 'short_title';
+			} elseif ( ! $title_is_auto ) {
+				/* Only flag length problems for manually written titles */
+				if ( $title_len > $title_max ) {
+					$issues[] = 'long_title';
+				} elseif ( $title_len < $title_min ) {
+					$issues[] = 'short_title';
+				}
 			}
 
 			/* Meta Description checks */
 			if ( empty( $meta_desc ) ) {
 				$issues[] = 'missing_desc';
-			} elseif ( $desc_len > $desc_max ) {
-				$issues[] = 'long_desc';
-			} elseif ( $desc_len < $desc_min ) {
-				$issues[] = 'short_desc';
+			} elseif ( ! $desc_is_auto ) {
+				if ( $desc_len > $desc_max ) {
+					$issues[] = 'long_desc';
+				} elseif ( $desc_len < $desc_min ) {
+					$issues[] = 'short_desc';
+				}
 			}
 
 			/* Duplicate H1 / meta title */
@@ -75,12 +90,22 @@ class MerdusSEO_Meta_Analyzer {
 
 	/* ── Helpers ─────────────────────────────────────────────────────── */
 
-	/** Returns meta title — checks AIOSEO v4 (custom table), Yoast, RankMath, AIOSEO legacy, plugin own. */
+	/** Returns meta title — checks AIOSEO v4 (custom row → global default), Yoast, RankMath, AIOSEO legacy, plugin own. */
 	public static function get_meta_title( WP_Post $post ): string {
-		/* AIOSEO v4 — stores data in its own table with token-based templates */
-		$aioseo = self::get_aioseo_row( $post->ID );
-		if ( $aioseo && ! empty( $aioseo->title ) ) {
-			return self::resolve_aioseo_tokens( $aioseo->title, $post );
+		/* AIOSEO v4 ─────────────────────────────────────────────────────
+		 * 1. Post-specific row in aioseo_posts (custom override)
+		 * 2. Global default template for this post type from aioseo_options
+		 * When AIOSEO is active every post has at least the default template,
+		 * so we resolve and return rather than returning empty string. */
+		$aioseo = self::get_aioseo_row( $post->ID ); // also populates self::$aioseo_table_exists
+		if ( self::$aioseo_table_exists ) {
+			$template = ( $aioseo && ! empty( $aioseo->title ) )
+				? $aioseo->title
+				: self::get_aioseo_default_template( $post->post_type, 'title' );
+
+			if ( ! empty( $template ) ) {
+				return self::resolve_aioseo_tokens( $template, $post );
+			}
 		}
 
 		$sources = [
@@ -93,22 +118,26 @@ class MerdusSEO_Meta_Analyzer {
 		foreach ( $sources as $key ) {
 			$val = get_post_meta( $post->ID, $key, true );
 			if ( ! empty( $val ) ) {
-				/* Resolve tokens if present (AIOSEO style) */
-				if ( str_contains( (string) $val, '#' ) ) {
-					return self::resolve_aioseo_tokens( (string) $val, $post );
-				}
-				return (string) $val;
+				return str_contains( (string) $val, '#' )
+					? self::resolve_aioseo_tokens( (string) $val, $post )
+					: (string) $val;
 			}
 		}
 		return '';
 	}
 
-	/** Returns meta description — checks AIOSEO v4 (custom table), Yoast, RankMath, AIOSEO legacy, plugin own. */
+	/** Returns meta description — checks AIOSEO v4 (custom row → global default), Yoast, RankMath, AIOSEO legacy, plugin own. */
 	public static function get_meta_desc( WP_Post $post ): string {
 		/* AIOSEO v4 */
 		$aioseo = self::get_aioseo_row( $post->ID );
-		if ( $aioseo && ! empty( $aioseo->description ) ) {
-			return self::resolve_aioseo_tokens( $aioseo->description, $post );
+		if ( self::$aioseo_table_exists ) {
+			$template = ( $aioseo && ! empty( $aioseo->description ) )
+				? $aioseo->description
+				: self::get_aioseo_default_template( $post->post_type, 'metaDescription' );
+
+			if ( ! empty( $template ) ) {
+				return self::resolve_aioseo_tokens( $template, $post );
+			}
 		}
 
 		$sources = [
@@ -121,13 +150,39 @@ class MerdusSEO_Meta_Analyzer {
 		foreach ( $sources as $key ) {
 			$val = get_post_meta( $post->ID, $key, true );
 			if ( ! empty( $val ) ) {
-				if ( str_contains( (string) $val, '#' ) ) {
-					return self::resolve_aioseo_tokens( (string) $val, $post );
-				}
-				return (string) $val;
+				return str_contains( (string) $val, '#' )
+					? self::resolve_aioseo_tokens( (string) $val, $post )
+					: (string) $val;
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Read the global AIOSEO title/description template for a post type.
+	 * Falls back to "#post_title #separator_sa #site_title" for titles.
+	 *
+	 * @param string $post_type  WP post type slug (e.g. 'post', 'page')
+	 * @param string $field      'title' or 'metaDescription'
+	 */
+	private static function get_aioseo_default_template( string $post_type, string $field ): string {
+		static $opts = null;
+		if ( null === $opts ) {
+			$raw  = get_option( 'aioseo_options', '' );
+			$opts = ! empty( $raw )
+				? ( is_string( $raw ) ? json_decode( $raw, true ) : (array) $raw )
+				: [];
+		}
+
+		/* AIOSEO stores per-post-type defaults in searchAppearance.dynamic.postTypes.{type}.{field} */
+		$val = $opts['searchAppearance']['dynamic']['postTypes'][ $post_type ][ $field ] ?? '';
+
+		/* Ultimate fallback for title so it is never empty when AIOSEO is active */
+		if ( empty( $val ) && $field === 'title' ) {
+			$val = '#post_title #separator_sa #site_title';
+		}
+
+		return (string) $val;
 	}
 
 	/* ── AIOSEO v4 helpers ───────────────────────────────────────────── */
