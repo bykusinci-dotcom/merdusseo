@@ -198,12 +198,12 @@ class MerdusSEO_Link_Checker {
 	private static function should_skip( string $url, string $absolute_url ): bool {
 		$lower = strtolower( $url );
 
-		if ( str_starts_with( $lower, 'javascript:' ) ) return true;
-		if ( str_starts_with( $lower, 'data:' ) )       return true;
+		if ( strpos( $lower, 'javascript:' ) === 0 ) return true;
+		if ( strpos( $lower, 'data:' ) === 0 )       return true;
 
-		$path = rtrim( wp_parse_url( $absolute_url, PHP_URL_PATH ) ?? '', '/' );
+		$path = rtrim( (string) ( wp_parse_url( $absolute_url, PHP_URL_PATH ) ?? '' ), '/' );
 		foreach ( self::WP_INTERNAL_PATHS as $wp_path ) {
-			if ( $path === $wp_path || str_starts_with( $path, $wp_path . '/' ) ) {
+			if ( $path === $wp_path || strpos( $path, $wp_path . '/' ) === 0 ) {
 				return true;
 			}
 		}
@@ -221,13 +221,13 @@ class MerdusSEO_Link_Checker {
 			$lower = strtolower( $url );
 			if (
 				empty( $url ) ||
-				str_starts_with( $url, '#' ) ||
-				str_starts_with( $lower, 'mailto:' ) ||
-				str_starts_with( $lower, 'tel:' ) ||
-				str_starts_with( $lower, 'javascript:' ) ||
-				str_starts_with( $lower, 'data:' ) ||
-				str_starts_with( $lower, 'sms:' ) ||
-				str_starts_with( $lower, 'whatsapp:' )
+				strpos( $url, '#' ) === 0 ||
+				strpos( $lower, 'mailto:' ) === 0 ||
+				strpos( $lower, 'tel:' ) === 0 ||
+				strpos( $lower, 'javascript:' ) === 0 ||
+				strpos( $lower, 'data:' ) === 0 ||
+				strpos( $lower, 'sms:' ) === 0 ||
+				strpos( $lower, 'whatsapp:' ) === 0
 			) {
 				continue;
 			}
@@ -237,8 +237,8 @@ class MerdusSEO_Link_Checker {
 	}
 
 	private static function to_absolute( string $url ): string {
-		if ( str_starts_with( $url, 'http' ) ) return $url;
-		if ( str_starts_with( $url, '//' ) )   return 'https:' . $url;
+		if ( strpos( $url, 'http' ) === 0 ) return $url;
+		if ( strpos( $url, '//' ) === 0 )   return 'https:' . $url;
 		return rtrim( get_site_url(), '/' ) . '/' . ltrim( $url, '/' );
 	}
 

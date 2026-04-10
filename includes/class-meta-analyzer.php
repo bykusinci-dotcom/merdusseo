@@ -118,7 +118,7 @@ class MerdusSEO_Meta_Analyzer {
 		foreach ( $sources as $key ) {
 			$val = get_post_meta( $post->ID, $key, true );
 			if ( ! empty( $val ) ) {
-				return str_contains( (string) $val, '#' )
+				return strpos( (string) $val, '#' ) !== false
 					? self::resolve_aioseo_tokens( (string) $val, $post )
 					: (string) $val;
 			}
@@ -150,7 +150,7 @@ class MerdusSEO_Meta_Analyzer {
 		foreach ( $sources as $key ) {
 			$val = get_post_meta( $post->ID, $key, true );
 			if ( ! empty( $val ) ) {
-				return str_contains( (string) $val, '#' )
+				return strpos( (string) $val, '#' ) !== false
 					? self::resolve_aioseo_tokens( (string) $val, $post )
 					: (string) $val;
 			}

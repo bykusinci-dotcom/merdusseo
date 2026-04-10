@@ -161,20 +161,20 @@ class MerdusSEO_Cannibalization {
 
 	/* ── Source label helper ─────────────────────────────────────────── */
 	public static function source_label( string $source ): string {
-		return match ( $source ) {
+		$labels = [
 			'focus_keyword' => 'Odak Kelime',
 			'tag'           => 'Etiket',
 			'category'      => 'Kategori',
-			default         => $source,
-		};
+		];
+		return $labels[ $source ] ?? $source;
 	}
 
 	public static function source_color( string $source ): string {
-		return match ( $source ) {
+		$colors = [
 			'focus_keyword' => 'purple',
 			'tag'           => 'blue',
 			'category'      => 'orange',
-			default         => 'gray',
-		};
+		];
+		return $colors[ $source ] ?? 'gray';
 	}
 }
