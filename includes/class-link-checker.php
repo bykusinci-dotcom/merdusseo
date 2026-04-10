@@ -64,18 +64,12 @@ class MerdusSEO_Link_Checker {
 				$status = self::check_url( $absolute, $timeout );
 
 				/*
-				 * 403 = access forbidden by the remote server, NOT necessarily broken.
-				 * We store it but do NOT mark it as is_broken so the "remove" action
-				 * won't touch it.
+				 * 403 = access forbidden — NOT broken. Store separately.
 				 * Truly broken: 404, 410, 5xx, timeout (0).
 				 */
 				$broken = ( $status !== 403 && ( $status >= 400 || $status === 0 ) ) ? 1 : 0;
 
-				/* Skip links that returned a healthy response — no need to store them */
-				if ( ! $broken && $status !== 403 ) {
-					continue;
-				}
-
+				/* Store ALL checked links so we can show OK / Restricted / Broken tabs */
 				$row = [
 					'source_id'    => $post->ID,
 					'source_url'   => get_permalink( $post->ID ),
@@ -99,9 +93,9 @@ class MerdusSEO_Link_Checker {
 
 	/* ── Get stored results ──────────────────────────────────────────── */
 	/**
-	 * @param string $filter  'problems'(default) | 'broken' | 'restricted' | 'internal' | 'external'
+	 * @param string $filter  'broken' | 'restricted' | 'ok' | 'all'
 	 */
-	public static function get_results( string $filter = 'problems' ): array {
+	public static function get_results( string $filter = 'broken' ): array {
 		global $wpdb;
 
 		switch ( $filter ) {
@@ -111,14 +105,11 @@ class MerdusSEO_Link_Checker {
 			case 'restricted':
 				$where = 'WHERE http_status = 403';
 				break;
-			case 'internal':
-				$where = "WHERE link_type = 'internal' AND (is_broken = 1 OR http_status = 403)";
+			case 'ok':
+				$where = 'WHERE is_broken = 0 AND http_status != 403';
 				break;
-			case 'external':
-				$where = "WHERE link_type = 'external' AND (is_broken = 1 OR http_status = 403)";
-				break;
-			default: /* problems — broken + restricted */
-				$where = 'WHERE is_broken = 1 OR http_status = 403';
+			default: /* all */
+				$where = '';
 		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -127,7 +118,6 @@ class MerdusSEO_Link_Checker {
 			ARRAY_A
 		) ?: [];
 
-		/* Enrich each row with a semantic status_type */
 		foreach ( $rows as &$row ) {
 			$row['status_type'] = self::get_status_type( (int) $row['http_status'] );
 		}
@@ -148,7 +138,6 @@ class MerdusSEO_Link_Checker {
 
 		if ( empty( $broken ) ) return 0;
 
-		/* Group by source post */
 		$by_post = [];
 		foreach ( $broken as $row ) {
 			$by_post[ $row['source_id'] ][] = $row['link_url'];
@@ -163,7 +152,6 @@ class MerdusSEO_Link_Checker {
 			$content = $post->post_content;
 
 			foreach ( $urls as $url ) {
-				/* Replace <a href="URL">text</a> → just the anchor text */
 				$content = preg_replace(
 					'/<a\s[^>]*href=["\']' . preg_quote( $url, '/' ) . '["\'][^>]*>(.*?)<\/a>/is',
 					'$1',
@@ -175,7 +163,6 @@ class MerdusSEO_Link_Checker {
 			wp_update_post( [ 'ID' => $post_id, 'post_content' => $content ] );
 		}
 
-		/* Remove from DB */
 		$wpdb->query( 'DELETE FROM ' . self::table() . ' WHERE is_broken = 1' ); // phpcs:ignore
 
 		return $removed;
@@ -191,38 +178,29 @@ class MerdusSEO_Link_Checker {
 		$total      = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 		$broken     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_broken = 1" );
 		$restricted = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE http_status = 403" );
-		$internal   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE link_type = 'internal' AND (is_broken = 1 OR http_status = 403)" );
-		$external   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE link_type = 'external' AND (is_broken = 1 OR http_status = 403)" );
 		// phpcs:enable
 
-		$problems = $broken + $restricted;
+		$ok = $total - $broken - $restricted;
 
-		return compact( 'total', 'broken', 'restricted', 'ok', 'internal', 'external', 'problems' );
+		return compact( 'total', 'broken', 'restricted', 'ok' );
 	}
 
 	/* ── Status type helper ──────────────────────────────────────────── */
-	/** Maps HTTP status code to a semantic type string. */
 	public static function get_status_type( int $status ): string {
-		if ( $status === 403 )                          return 'restricted';
-		if ( $status >= 400 || $status === 0 )          return 'broken';
-		if ( $status >= 200 && $status < 400 )          return 'ok';
+		if ( $status === 403 )                 return 'restricted';
+		if ( $status >= 400 || $status === 0 ) return 'broken';
+		if ( $status >= 200 )                  return 'ok';
 		return 'unknown';
 	}
 
 	/* ── Internal helpers ────────────────────────────────────────────── */
 
-	/**
-	 * Returns true if the link should be skipped entirely.
-	 * Covers: javascript: pseudo-URIs, data: URIs, WordPress server-side paths.
-	 */
 	private static function should_skip( string $url, string $absolute_url ): bool {
 		$lower = strtolower( $url );
 
-		/* JavaScript and data pseudo-URIs */
 		if ( str_starts_with( $lower, 'javascript:' ) ) return true;
 		if ( str_starts_with( $lower, 'data:' ) )       return true;
 
-		/* WordPress internal server paths */
 		$path = rtrim( wp_parse_url( $absolute_url, PHP_URL_PATH ) ?? '', '/' );
 		foreach ( self::WP_INTERNAL_PATHS as $wp_path ) {
 			if ( $path === $wp_path || str_starts_with( $path, $wp_path . '/' ) ) {
@@ -233,7 +211,6 @@ class MerdusSEO_Link_Checker {
 		return false;
 	}
 
-	/** Extract all <a href="..."> links from HTML content. */
 	private static function extract_links( string $content ): array {
 		$links = [];
 		if ( ! preg_match_all( '/<a\s[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/is', $content, $matches, PREG_SET_ORDER ) ) {
@@ -242,7 +219,6 @@ class MerdusSEO_Link_Checker {
 		foreach ( $matches as $m ) {
 			$url   = trim( $m[1] );
 			$lower = strtolower( $url );
-			/* Early-exit for clearly non-HTTP targets */
 			if (
 				empty( $url ) ||
 				str_starts_with( $url, '#' ) ||
@@ -260,14 +236,12 @@ class MerdusSEO_Link_Checker {
 		return $links;
 	}
 
-	/** Convert relative URL to absolute. */
 	private static function to_absolute( string $url ): string {
 		if ( str_starts_with( $url, 'http' ) ) return $url;
 		if ( str_starts_with( $url, '//' ) )   return 'https:' . $url;
 		return rtrim( get_site_url(), '/' ) . '/' . ltrim( $url, '/' );
 	}
 
-	/** HEAD request; falls back to GET on failure. Returns HTTP status code (0 = network error/timeout). */
 	private static function check_url( string $url, int $timeout ): int {
 		$args = [
 			'timeout'    => $timeout,
@@ -278,7 +252,6 @@ class MerdusSEO_Link_Checker {
 		$response = wp_remote_head( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
-			/* Try GET fallback — some servers reject HEAD */
 			$response = wp_remote_get( $url, $args );
 		}
 

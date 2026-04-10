@@ -13,6 +13,7 @@
 			'merdusseo-meta'           => 'Meta Analizi',
 			'merdusseo-links'          => 'Kırık Linkler',
 			'merdusseo-cannibalization'=> 'Keyword Yamyamlığı',
+			'merdusseo-gsc'            => 'GSC',
 			'merdusseo-settings'       => 'Ayarlar',
 		];
 		foreach ( $nav_items as $page => $label ) {

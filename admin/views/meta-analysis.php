@@ -1,11 +1,16 @@
-<?php defined( 'ABSPATH' ) || exit; ?>
+<?php defined( 'ABSPATH' ) || exit;
+/* Load cached results so data survives page refresh */
+$cached         = get_transient( 'merdusseo_meta_results' );
+$cached_results = is_array( $cached ) ? $cached : [];
+$cached_summary = $cached_results ? MerdusSEO_Meta_Analyzer::summary( $cached_results ) : null;
+?>
 <div class="mseo-wrap">
 	<?php include __DIR__ . '/partials/header.php'; ?>
 
 	<div class="mseo-body">
 		<div class="mseo-page-title">
 			<h1>Meta Analizi</h1>
-			<p class="mseo-subtitle">Meta title, meta description ve H1 başlık sorunlarını tespit edin</p>
+			<p class="mseo-subtitle">Meta title, description ve H1 başlık sorunlarını tespit edin</p>
 		</div>
 
 		<!-- Toolbar -->
@@ -14,72 +19,83 @@
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
 				Tüm Siteyi Tara
 			</button>
-			<button class="mseo-btn mseo-btn--secondary" id="btn-export-csv">
+			<button class="mseo-btn mseo-btn--secondary" id="btn-export-csv" <?php echo ! $cached_results ? 'disabled' : ''; ?>>
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-				CSV Olarak İndir
+				CSV İndir
 			</button>
 			<label class="mseo-btn mseo-btn--secondary" for="csv-import-input">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
-				CSV İmport Et
+				CSV İmport
 			</label>
 			<input type="file" id="csv-import-input" accept=".csv" style="display:none">
-
-			<!-- Filters -->
-			<div class="mseo-toolbar__filters">
-				<select id="meta-filter-type" class="mseo-select">
-					<option value="">Tümü</option>
-					<option value="missing_title">Eksik Title</option>
-					<option value="long_title">Uzun Title</option>
-					<option value="short_title">Kısa Title</option>
-					<option value="missing_desc">Eksik Description</option>
-					<option value="long_desc">Uzun Description</option>
-					<option value="short_desc">Kısa Description</option>
-					<option value="duplicate_h1_title">Duplicate H1/Title</option>
-				</select>
-				<input type="text" id="meta-search" class="mseo-input" placeholder="Ara...">
-			</div>
-		</div>
-
-		<!-- Summary bar -->
-		<div class="mseo-summary-bar" id="meta-summary" style="display:none">
-			<div class="mseo-summary-item mseo-summary-item--ok">
-				<span class="mseo-summary-item__value" id="sum-ok">0</span>
-				<span class="mseo-summary-item__label">Sorunsuz</span>
-			</div>
-			<div class="mseo-summary-item mseo-summary-item--danger">
-				<span class="mseo-summary-item__value" id="sum-issues">0</span>
-				<span class="mseo-summary-item__label">Sorunlu</span>
-			</div>
-			<div class="mseo-summary-item">
-				<span class="mseo-summary-item__value" id="sum-missing-title">0</span>
-				<span class="mseo-summary-item__label">Eksik Title</span>
-			</div>
-			<div class="mseo-summary-item">
-				<span class="mseo-summary-item__value" id="sum-long-title">0</span>
-				<span class="mseo-summary-item__label">Uzun Title</span>
-			</div>
-			<div class="mseo-summary-item">
-				<span class="mseo-summary-item__value" id="sum-missing-desc">0</span>
-				<span class="mseo-summary-item__label">Eksik Desc</span>
-			</div>
-			<div class="mseo-summary-item">
-				<span class="mseo-summary-item__value" id="sum-long-desc">0</span>
-				<span class="mseo-summary-item__label">Uzun Desc</span>
-			</div>
-			<div class="mseo-summary-item">
-				<span class="mseo-summary-item__value" id="sum-duplicate">0</span>
-				<span class="mseo-summary-item__label">Duplicate H1/Title</span>
+			<div style="margin-left:auto">
+				<input type="text" id="meta-search" class="mseo-input" placeholder="Başlık ara…" style="width:200px">
 			</div>
 		</div>
 
 		<!-- Progress -->
 		<div class="mseo-progress" id="meta-progress" style="display:none">
 			<div class="mseo-progress__bar"><div class="mseo-progress__fill mseo-progress__fill--animated"></div></div>
-			<p>Taranıyor, lütfen bekleyin...</p>
+			<p>Taranıyor, lütfen bekleyin…</p>
+		</div>
+
+		<!-- Summary + Tab bar (hidden until scan) -->
+		<div id="meta-summary-wrap" style="<?php echo $cached_results ? '' : 'display:none'; ?>">
+
+			<!-- Clickable summary cards -->
+			<div class="mseo-link-cards" id="meta-cards">
+				<div class="mseo-link-card mseo-link-card--danger mseo-link-card--active" data-meta-tab="issues">
+					<div class="mseo-link-card__value" id="mc-issues"><?php echo esc_html( $cached_summary['issues'] ?? 0 ); ?></div>
+					<div class="mseo-link-card__label">Sorunlu</div>
+					<div class="mseo-link-card__hint">Tüm hatalar</div>
+				</div>
+				<div class="mseo-link-card mseo-link-card--ok" data-meta-tab="ok">
+					<div class="mseo-link-card__value" id="mc-ok"><?php echo esc_html( $cached_summary['ok'] ?? 0 ); ?></div>
+					<div class="mseo-link-card__label">Sorunsuz</div>
+					<div class="mseo-link-card__hint">Tümü geçerli</div>
+				</div>
+				<div class="mseo-link-card" data-meta-tab="missing_title">
+					<div class="mseo-link-card__value" id="mc-mt"><?php echo esc_html( $cached_summary['counts']['missing_title'] ?? 0 ); ?></div>
+					<div class="mseo-link-card__label">Eksik Title</div>
+					<div class="mseo-link-card__hint">&nbsp;</div>
+				</div>
+				<div class="mseo-link-card" data-meta-tab="long_title">
+					<div class="mseo-link-card__value" id="mc-lt"><?php echo esc_html( ( $cached_summary['counts']['long_title'] ?? 0 ) + ( $cached_summary['counts']['short_title'] ?? 0 ) ); ?></div>
+					<div class="mseo-link-card__label">Uzun/Kısa Title</div>
+					<div class="mseo-link-card__hint">&nbsp;</div>
+				</div>
+				<div class="mseo-link-card" data-meta-tab="missing_desc">
+					<div class="mseo-link-card__value" id="mc-md"><?php echo esc_html( $cached_summary['counts']['missing_desc'] ?? 0 ); ?></div>
+					<div class="mseo-link-card__label">Eksik Açıklama</div>
+					<div class="mseo-link-card__hint">&nbsp;</div>
+				</div>
+				<div class="mseo-link-card" data-meta-tab="long_desc">
+					<div class="mseo-link-card__value" id="mc-ld"><?php echo esc_html( ( $cached_summary['counts']['long_desc'] ?? 0 ) + ( $cached_summary['counts']['short_desc'] ?? 0 ) ); ?></div>
+					<div class="mseo-link-card__label">Uzun/Kısa Açıklama</div>
+					<div class="mseo-link-card__hint">&nbsp;</div>
+				</div>
+				<div class="mseo-link-card" data-meta-tab="duplicate_h1_title">
+					<div class="mseo-link-card__value" id="mc-dup"><?php echo esc_html( $cached_summary['counts']['duplicate_h1_title'] ?? 0 ); ?></div>
+					<div class="mseo-link-card__label">Duplicate H1</div>
+					<div class="mseo-link-card__hint">&nbsp;</div>
+				</div>
+			</div>
+
+			<!-- Active tab label -->
+			<div class="mseo-tabs">
+				<button class="mseo-tab mseo-tab--active" data-meta-tab="issues">Sorunlu</button>
+				<button class="mseo-tab" data-meta-tab="ok">Sorunsuz</button>
+				<button class="mseo-tab" data-meta-tab="missing_title">Eksik Title</button>
+				<button class="mseo-tab" data-meta-tab="long_title">Uzun/Kısa Title</button>
+				<button class="mseo-tab" data-meta-tab="missing_desc">Eksik Açıklama</button>
+				<button class="mseo-tab" data-meta-tab="long_desc">Uzun/Kısa Açıklama</button>
+				<button class="mseo-tab" data-meta-tab="duplicate_h1_title">Duplicate H1</button>
+				<button class="mseo-tab" data-meta-tab="all">Tümü</button>
+			</div>
 		</div>
 
 		<!-- Table -->
-		<div class="mseo-table-wrap" id="meta-table-wrap" style="display:none">
+		<div class="mseo-table-wrap" id="meta-table-wrap" style="<?php echo $cached_results ? '' : 'display:none'; ?>">
 			<table class="mseo-table" id="meta-table">
 				<thead>
 					<tr>
@@ -95,13 +111,16 @@
 					<!-- filled by JS -->
 				</tbody>
 			</table>
+			<div class="mseo-table-empty" id="meta-tab-empty" style="display:none">
+				<p>Bu filtreye uygun kayıt bulunamadı.</p>
+			</div>
 		</div>
 
 		<!-- Empty state -->
-		<div class="mseo-empty" id="meta-empty">
+		<div class="mseo-empty" id="meta-empty" style="<?php echo $cached_results ? 'display:none' : ''; ?>">
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
 			<h3>Henüz tarama yapılmadı</h3>
-			<p>"Tüm Siteyi Tara" butonuna tıklayarak meta analizi başlatın.</p>
+			<p>"Tüm Siteyi Tara" butonuna tıklayarak meta analizini başlatın.</p>
 		</div>
 	</div>
 </div>
@@ -159,3 +178,10 @@
 		</div>
 	</div>
 </div>
+
+<?php if ( $cached_results ) : ?>
+<script>
+window.merdusSEOCachedMeta    = <?php echo wp_json_encode( $cached_results ); ?>;
+window.merdusSEOCachedSummary = <?php echo wp_json_encode( $cached_summary ); ?>;
+</script>
+<?php endif; ?>

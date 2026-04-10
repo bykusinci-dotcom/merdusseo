@@ -9,15 +9,17 @@ class MerdusSEO_Admin {
 
 		/* AJAX — logged-in only */
 		$ajax_actions = [
-			'merdusseo_scan_meta'          => 'ajax_scan_meta',
-			'merdusseo_scan_links'         => 'ajax_scan_links',
+			'merdusseo_scan_meta'            => 'ajax_scan_meta',
+			'merdusseo_scan_links'           => 'ajax_scan_links',
 			'merdusseo_scan_cannibalization' => 'ajax_scan_cannibalization',
-			'merdusseo_remove_broken_links'=> 'ajax_remove_broken_links',
-			'merdusseo_ai_suggest'         => 'ajax_ai_suggest',
-			'merdusseo_save_meta'          => 'ajax_save_meta',
-			'merdusseo_export_csv'         => 'ajax_export_csv',
-			'merdusseo_import_csv'         => 'ajax_import_csv',
-			'merdusseo_save_settings'      => 'ajax_save_settings',
+			'merdusseo_remove_broken_links'  => 'ajax_remove_broken_links',
+			'merdusseo_ai_suggest'           => 'ajax_ai_suggest',
+			'merdusseo_save_meta'            => 'ajax_save_meta',
+			'merdusseo_export_csv'           => 'ajax_export_csv',
+			'merdusseo_import_csv'           => 'ajax_import_csv',
+			'merdusseo_save_settings'        => 'ajax_save_settings',
+			'merdusseo_gsc_save_credentials' => 'ajax_gsc_save_credentials',
+			'merdusseo_gsc_save_site'        => 'ajax_gsc_save_site',
 		];
 
 		foreach ( $ajax_actions as $action => $method ) {
@@ -26,6 +28,9 @@ class MerdusSEO_Admin {
 
 		/* Handle CSV export (redirect-based, not JSON) */
 		add_action( 'admin_init', [ $this, 'maybe_export_csv' ] );
+
+		/* Handle GSC disconnect form (POST, not AJAX) */
+		add_action( 'admin_init', [ $this, 'maybe_gsc_disconnect' ] );
 	}
 
 	/* ── Admin Menu ──────────────────────────────────────────────────── */
@@ -44,6 +49,7 @@ class MerdusSEO_Admin {
 		add_submenu_page( 'merdusseo', 'Meta Analizi',       'Meta Analizi',       'manage_options', 'merdusseo-meta',              [ $this, 'page_meta' ] );
 		add_submenu_page( 'merdusseo', 'Kırık Linkler',      'Kırık Linkler',      'manage_options', 'merdusseo-links',             [ $this, 'page_links' ] );
 		add_submenu_page( 'merdusseo', 'Keyword Yamyamlığı', 'Keyword Yamyamlığı', 'manage_options', 'merdusseo-cannibalization',   [ $this, 'page_cannibalization' ] );
+		add_submenu_page( 'merdusseo', 'GSC Bağlantısı',     'GSC Bağlantısı',     'manage_options', 'merdusseo-gsc',               [ $this, 'page_gsc' ] );
 		add_submenu_page( 'merdusseo', 'Ayarlar',            'Ayarlar',            'manage_options', 'merdusseo-settings',          [ $this, 'page_settings' ] );
 	}
 
@@ -54,6 +60,7 @@ class MerdusSEO_Admin {
 			'merdusseo_page_merdusseo-meta',
 			'merdusseo_page_merdusseo-links',
 			'merdusseo_page_merdusseo-cannibalization',
+			'merdusseo_page_merdusseo-gsc',
 			'merdusseo_page_merdusseo-settings',
 		];
 
@@ -86,6 +93,7 @@ class MerdusSEO_Admin {
 	public function page_meta(): void            { $this->load_view( 'meta-analysis' ); }
 	public function page_links(): void           { $this->load_view( 'link-checker' ); }
 	public function page_cannibalization(): void { $this->load_view( 'cannibalization' ); }
+	public function page_gsc(): void             { $this->load_view( 'gsc' ); }
 	public function page_settings(): void        { $this->load_view( 'settings' ); }
 
 	private function load_view( string $name ): void {
@@ -237,6 +245,40 @@ class MerdusSEO_Admin {
 		}
 
 		wp_send_json_success( [ 'message' => 'Ayarlar kaydedildi.' ] );
+	}
+
+	/* ── GSC disconnect (form POST) ─────────────────────────────────── */
+	public function maybe_gsc_disconnect(): void {
+		if ( ! isset( $_POST['merdusseo_gsc_action'] ) || $_POST['merdusseo_gsc_action'] !== 'disconnect' ) return;
+		if ( ! current_user_can( 'manage_options' ) ) return;
+		check_admin_referer( 'merdusseo_gsc_disconnect' );
+
+		MerdusSEO_GSC::disconnect();
+		wp_safe_redirect( admin_url( 'admin.php?page=merdusseo-gsc' ) );
+		exit;
+	}
+
+	/* ── AJAX: Save GSC credentials ──────────────────────────────────── */
+	public function ajax_gsc_save_credentials(): void {
+		$this->verify_nonce();
+
+		MerdusSEO_GSC::save_settings( [
+			'client_id'     => isset( $_POST['client_id'] )     ? sanitize_text_field( wp_unslash( $_POST['client_id'] ) )     : '',
+			'client_secret' => isset( $_POST['client_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['client_secret'] ) ) : '',
+		] );
+
+		wp_send_json_success( [ 'message' => 'Kimlik bilgileri kaydedildi.' ] );
+	}
+
+	/* ── AJAX: Save GSC site selection ───────────────────────────────── */
+	public function ajax_gsc_save_site(): void {
+		$this->verify_nonce();
+
+		MerdusSEO_GSC::save_settings( [
+			'site_url' => isset( $_POST['site_url'] ) ? esc_url_raw( wp_unslash( $_POST['site_url'] ) ) : '',
+		] );
+
+		wp_send_json_success( [ 'message' => 'Site seçimi kaydedildi.' ] );
 	}
 
 	/* ── Helper ──────────────────────────────────────────────────────── */

@@ -38,13 +38,13 @@
 
   /* ─── Issue badge helper ──────────────────────────────────── */
   const issueLabels = {
-    missing_title:     { text: 'Eksik Title',       cls: '' },
-    long_title:        { text: 'Uzun Title',         cls: '--warning' },
-    short_title:       { text: 'Kısa Title',         cls: '--warning' },
-    missing_desc:      { text: 'Eksik Açıklama',    cls: '' },
-    long_desc:         { text: 'Uzun Açıklama',     cls: '--warning' },
-    short_desc:        { text: 'Kısa Açıklama',     cls: '--warning' },
-    duplicate_h1_title:{ text: 'Duplicate H1/Title', cls: '--info' },
+    missing_title:     { text: 'Eksik Title',        cls: '' },
+    long_title:        { text: 'Uzun Title',          cls: '--warning' },
+    short_title:       { text: 'Kısa Title',          cls: '--warning' },
+    missing_desc:      { text: 'Eksik Açıklama',     cls: '' },
+    long_desc:         { text: 'Uzun Açıklama',      cls: '--warning' },
+    short_desc:        { text: 'Kısa Açıklama',      cls: '--warning' },
+    duplicate_h1_title:{ text: 'Duplicate H1/Title',  cls: '--info' },
   };
 
   function issueBadge(issue) {
@@ -52,27 +52,103 @@
     return '<span class="mseo-issue-badge' + meta.cls + '">' + meta.text + '</span>';
   }
 
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   /* ═══════════════════════════════════════════════════════════
      META ANALYSIS PAGE
      ═══════════════════════════════════════════════════════════ */
-  let metaResults = [];
+  let metaResults  = [];
+  let activeMetaTab = 'issues';
+
+  /* ── Summary cards ─────────────────────────────────────────── */
+  function updateMetaSummaryCards(s) {
+    $('#mc-issues').text(s.issues);
+    $('#mc-ok').text(s.ok);
+    $('#mc-mt').text(s.counts.missing_title);
+    $('#mc-lt').text((s.counts.long_title || 0) + (s.counts.short_title || 0));
+    $('#mc-md').text(s.counts.missing_desc);
+    $('#mc-ld').text((s.counts.long_desc || 0) + (s.counts.short_desc || 0));
+    $('#mc-dup').text(s.counts.duplicate_h1_title);
+  }
+
+  /* ── Switch meta tab ───────────────────────────────────────── */
+  function switchMetaTab(tab) {
+    activeMetaTab = tab;
+
+    /* Update card active state */
+    $('#meta-cards [data-meta-tab]').removeClass('mseo-link-card--active');
+    $('#meta-cards [data-meta-tab="' + tab + '"]').addClass('mseo-link-card--active');
+
+    /* Update tab button active state */
+    $('#meta-summary-wrap .mseo-tab').removeClass('mseo-tab--active');
+    $('#meta-summary-wrap .mseo-tab[data-meta-tab="' + tab + '"]').addClass('mseo-tab--active');
+
+    applyMetaFilters();
+  }
+
+  /* ── Filter & search ───────────────────────────────────────── */
+  function applyMetaFilters() {
+    const tab    = activeMetaTab;
+    const search = $('#meta-search').val().toLowerCase();
+    let visible  = 0;
+
+    $('#meta-table-body tr').each(function () {
+      const $tr    = $(this);
+      const issues = $tr.attr('data-issues') || '';
+      const title  = $tr.attr('data-title') || '';
+
+      let matchTab = true;
+      if (tab === 'issues') {
+        matchTab = issues.trim() !== '';
+      } else if (tab === 'ok') {
+        matchTab = issues.trim() === '';
+      } else if (tab !== 'all') {
+        matchTab = issues.includes(tab);
+      }
+
+      const matchSearch = !search || title.includes(search);
+      const show = matchTab && matchSearch;
+      $tr.toggle(show);
+      if (show) visible++;
+    });
+
+    const $empty = $('#meta-tab-empty');
+    if ($empty.length) {
+      $empty.toggle(visible === 0 && $('#meta-table-body tr').length > 0);
+    }
+  }
+
+  $('#meta-search').on('input', applyMetaFilters);
+
+  /* ── Clickable summary cards ────────────────────────────────── */
+  $(document).on('click', '#meta-cards [data-meta-tab]', function () {
+    switchMetaTab($(this).data('meta-tab'));
+  });
+
+  /* ── Tab button clicks ─────────────────────────────────────── */
+  $(document).on('click', '#meta-summary-wrap .mseo-tab', function () {
+    switchMetaTab($(this).data('meta-tab'));
+  });
 
   /* ── Scan ──────────────────────────────────────────────────── */
   $('#btn-scan-meta').on('click', function () {
     const $btn = $(this);
     $btn.prop('disabled', true).text('Taranıyor...');
     $('#meta-progress').show();
-    $('#meta-empty, #meta-table-wrap').hide();
+    $('#meta-empty, #meta-table-wrap, #meta-summary-wrap').hide();
 
     ajax('merdusseo_scan_meta', {}).done(function (res) {
       if (!res.success) { toast(res.data.message, 'error'); return; }
 
       metaResults = res.data.results;
-      updateMetaSummary(res.data.summary);
+      updateMetaSummaryCards(res.data.summary);
       renderMetaTable(metaResults);
       $('#meta-progress').hide();
-      $('#meta-table-wrap').show();
-      $('#meta-summary').show();
+      $('#meta-summary-wrap, #meta-table-wrap').show();
+      $('#btn-export-csv').prop('disabled', false);
+      switchMetaTab('issues');
       toast('Tarama tamamlandı. ' + metaResults.length + ' sayfa analiz edildi.');
     }).fail(function () {
       toast('Tarama sırasında bir hata oluştu.', 'error');
@@ -83,29 +159,18 @@
     });
   });
 
-  /* ── Summary ───────────────────────────────────────────────── */
-  function updateMetaSummary(s) {
-    $('#sum-ok').text(s.ok);
-    $('#sum-issues').text(s.issues);
-    $('#sum-missing-title').text(s.counts.missing_title);
-    $('#sum-long-title').text(s.counts.long_title + (s.counts.short_title ? '+' + s.counts.short_title : ''));
-    $('#sum-missing-desc').text(s.counts.missing_desc);
-    $('#sum-long-desc').text(s.counts.long_desc + (s.counts.short_desc ? '+' + s.counts.short_desc : ''));
-    $('#sum-duplicate').text(s.counts.duplicate_h1_title);
-  }
-
   /* ── Render table ──────────────────────────────────────────── */
   function renderMetaTable(rows) {
     const $tbody = $('#meta-table-body').empty();
 
     rows.forEach(function (r) {
-      const issues = r.issues.map(issueBadge).join(' ');
+      const issues  = r.issues.map(issueBadge).join(' ');
       const titleOk = !r.issues.some(i => i.includes('title'));
       const descOk  = !r.issues.some(i => i.includes('desc'));
 
       const row = `
         <tr class="${r.issues.length ? 'mseo-row--broken' : ''}"
-            data-issues="${r.issues.join(' ')}"
+            data-issues="${escHtml(r.issues.join(' '))}"
             data-title="${escHtml(r.title).toLowerCase()}"
             data-post-id="${r.post_id}">
           <td>
@@ -139,27 +204,15 @@
     });
   }
 
-  function escHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  /* ── Page-load: restore cached results ─────────────────────── */
+  if (window.merdusSEOCachedMeta && window.merdusSEOCachedMeta.length) {
+    metaResults = window.merdusSEOCachedMeta;
+    renderMetaTable(metaResults);
+    if (window.merdusSEOCachedSummary) {
+      updateMetaSummaryCards(window.merdusSEOCachedSummary);
+    }
+    switchMetaTab('issues');
   }
-
-  /* ── Filter & search ───────────────────────────────────────── */
-  function applyMetaFilters() {
-    const filterVal = $('#meta-filter-type').val();
-    const search    = $('#meta-search').val().toLowerCase();
-
-    $('#meta-table-body tr').each(function () {
-      const $tr     = $(this);
-      const issues  = $tr.attr('data-issues') || '';
-      const title   = $tr.attr('data-title') || '';
-      const matchF  = !filterVal || issues.includes(filterVal);
-      const matchS  = !search || title.includes(search);
-      $tr.toggle(matchF && matchS);
-    });
-  }
-
-  $('#meta-filter-type').on('change', applyMetaFilters);
-  $('#meta-search').on('input', applyMetaFilters);
 
   /* ── Edit modal ────────────────────────────────────────────── */
   $(document).on('click', '.btn-edit-meta', function () {
@@ -178,7 +231,6 @@
   $('#edit-modal-close, #edit-modal-cancel').on('click', () => $('#edit-modal').fadeOut(150));
   $('#edit-modal-overlay').on('click', function(e) { if ($(e.target).is('#edit-modal')) $('#edit-modal').fadeOut(150); });
 
-  /* Char counters in modal */
   $('#edit-meta-title').on('input', function () {
     updateCounter($(this), $('#title-counter'), $('#title-bar'), 60);
   });
@@ -208,14 +260,14 @@
 
   /* ── AI suggest ────────────────────────────────────────────── */
   $(document).on('click', '.mseo-btn--ai', function () {
-    const field   = $(this).data('field');
-    const postId  = $('#edit-post-id').val();
-    const $wrap   = field === 'title' ? $('#title-suggestions') : $('#desc-suggestions');
-    const $input  = field === 'title' ? $('#edit-meta-title') : $('#edit-meta-desc');
-    const maxLen  = field === 'title' ? 60 : 160;
-    const $bar    = field === 'title' ? $('#title-bar') : $('#desc-bar');
-    const $counter= field === 'title' ? $('#title-counter') : $('#desc-counter');
-    const $btn    = $(this);
+    const field    = $(this).data('field');
+    const postId   = $('#edit-post-id').val();
+    const $wrap    = field === 'title' ? $('#title-suggestions') : $('#desc-suggestions');
+    const $input   = field === 'title' ? $('#edit-meta-title') : $('#edit-meta-desc');
+    const maxLen   = field === 'title' ? 60 : 160;
+    const $bar     = field === 'title' ? $('#title-bar') : $('#desc-bar');
+    const $counter = field === 'title' ? $('#title-counter') : $('#desc-counter');
+    const $btn     = $(this);
 
     $btn.prop('disabled', true);
     $wrap.show().html('<div class="mseo-ai-loading">⭐ AI önerileri yükleniyor...</div>');
@@ -237,7 +289,6 @@
       });
       $wrap.html(html);
 
-      /* Click to apply */
       $wrap.find('.mseo-suggestion').on('click', function () {
         $input.val($(this).data('text'));
         updateCounter($input, $counter, $bar, maxLen);
@@ -282,13 +333,66 @@
       }
     }).fail(() => toast('İçe aktarma sırasında hata oluştu.', 'error'));
 
-    /* Reset input */
     $(this).val('');
   });
 
   /* ═══════════════════════════════════════════════════════════
      LINK CHECKER PAGE
      ═══════════════════════════════════════════════════════════ */
+
+  /* ── Switch link tab ───────────────────────────────────────── */
+  function switchLinkTab(tab) {
+    $('#link-cards [data-tab]').removeClass('mseo-link-card--active');
+    $('#link-cards [data-tab="' + tab + '"]').addClass('mseo-link-card--active');
+
+    $('#link-tabs .mseo-tab').removeClass('mseo-tab--active');
+    $('#link-tabs .mseo-tab[data-tab="' + tab + '"]').addClass('mseo-tab--active');
+
+    applyLinkFilters(tab);
+  }
+
+  /* ── Filter rows by active tab + search ───────────────────── */
+  function applyLinkFilters(tab) {
+    const activeTab = tab || $('#link-tabs .mseo-tab--active').data('tab') || 'broken';
+    const search    = $('#link-search').val().toLowerCase();
+    let visible     = 0;
+
+    $('#link-table-body tr').each(function () {
+      const $tr  = $(this);
+      const dtab = $tr.data('tab');
+      const src  = $tr.data('source') || '';
+      const url  = $tr.data('url') || '';
+
+      const matchTab    = dtab === activeTab;
+      const matchSearch = !search || src.includes(search) || url.includes(search);
+      const show = matchTab && matchSearch;
+      $tr.toggle(show);
+      if (show) visible++;
+    });
+
+    const $empty = $('#link-tab-empty');
+    if ($empty.length) {
+      $empty.toggle(visible === 0 && $('#link-table-body tr').length > 0);
+    }
+  }
+
+  /* ── Card + tab button clicks ──────────────────────────────── */
+  $(document).on('click', '#link-cards [data-tab]', function () {
+    switchLinkTab($(this).data('tab'));
+  });
+
+  $(document).on('click', '#link-tabs .mseo-tab', function () {
+    switchLinkTab($(this).data('tab'));
+  });
+
+  $('#link-search').on('input', function () {
+    applyLinkFilters();
+  });
+
+  /* ── Page-load: show broken tab by default ─────────────────── */
+  if ($('#link-table-body tr').length) {
+    switchLinkTab('broken');
+  }
 
   /* ── Scan links ────────────────────────────────────────────── */
   $('#btn-scan-links').on('click', function () {
@@ -334,32 +438,6 @@
       .always(() => $btn.prop('disabled', false));
   });
 
-  /* ── Link filter & search ──────────────────────────────────── */
-  function applyLinkFilters() {
-    const filter = $('#link-filter').val();
-    const search = $('#link-search').val().toLowerCase();
-
-    $('#link-table-body tr').each(function () {
-      const $tr    = $(this);
-      const type   = $tr.data('type');
-      const status = $tr.data('status'); /* 'broken' | 'restricted' */
-      const src    = $tr.data('source') || '';
-      const url    = $tr.data('url') || '';
-
-      let matchF = true;
-      if (filter === 'broken')     matchF = status === 'broken';
-      if (filter === 'restricted') matchF = status === 'restricted';
-      if (filter === 'internal')   matchF = type === 'internal';
-      if (filter === 'external')   matchF = type === 'external';
-
-      const matchS = !search || src.includes(search) || url.includes(search);
-      $tr.toggle(matchF && matchS);
-    });
-  }
-
-  $('#link-filter').on('change', applyLinkFilters);
-  $('#link-search').on('input', applyLinkFilters);
-
   /* ═══════════════════════════════════════════════════════════
      KEYWORD CANNIBALIZATION PAGE
      ═══════════════════════════════════════════════════════════ */
@@ -383,7 +461,6 @@
       });
   });
 
-  /* Keyword search in cannibalization */
   $('#can-search').on('input', function () {
     const q = $(this).val().toLowerCase();
     $('.mseo-can-group').each(function () {
@@ -393,17 +470,65 @@
   });
 
   /* ═══════════════════════════════════════════════════════════
+     GSC PAGE
+     ═══════════════════════════════════════════════════════════ */
+
+  /* ── Toggle client secret visibility ──────────────────────── */
+  $('#toggle-gsc-secret').on('click', function () {
+    const $input = $('[name="client_secret"]');
+    const isPass = $input.attr('type') === 'password';
+    $input.attr('type', isPass ? 'text' : 'password');
+    $(this).text(isPass ? 'Gizle' : 'Göster');
+  });
+
+  /* ── Save GSC credentials ──────────────────────────────────── */
+  $('#gsc-credentials-form').on('submit', function (e) {
+    e.preventDefault();
+    const $btn = $(this).find('[type="submit"]');
+    $btn.prop('disabled', true).text('Kaydediliyor...');
+
+    ajax('merdusseo_gsc_save_credentials', {
+      client_id:     $('[name="client_id"]').val(),
+      client_secret: $('[name="client_secret"]').val(),
+    }).done(function (res) {
+      if (res.success) {
+        toast(res.data.message || 'Kimlik bilgileri kaydedildi.');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        toast(res.data.message || 'Bir hata oluştu.', 'error');
+      }
+    }).fail(() => toast('Kayıt sırasında bir hata oluştu.', 'error'))
+      .always(() => $btn.prop('disabled', false).text('Kaydet'));
+  });
+
+  /* ── Save GSC site selection ───────────────────────────────── */
+  $('#gsc-site-form').on('submit', function (e) {
+    e.preventDefault();
+    const $btn = $(this).find('[type="submit"]');
+    $btn.prop('disabled', true).text('Kaydediliyor...');
+
+    ajax('merdusseo_gsc_save_site', {
+      site_url: $('[name="site_url"]').val(),
+    }).done(function (res) {
+      if (res.success) {
+        toast(res.data.message || 'Site seçimi kaydedildi.');
+      } else {
+        toast(res.data.message || 'Bir hata oluştu.', 'error');
+      }
+    }).fail(() => toast('Kayıt sırasında bir hata oluştu.', 'error'))
+      .always(() => $btn.prop('disabled', false).text('Siteyi Seç & Kaydet'));
+  });
+
+  /* ═══════════════════════════════════════════════════════════
      SETTINGS PAGE
      ═══════════════════════════════════════════════════════════ */
 
-  /* AI provider toggle */
   $('#ai-provider').on('change', function () {
     const val = $(this).val();
     $('#openai-models').toggleClass('mseo-hidden', val !== 'openai');
     $('#anthropic-models').toggleClass('mseo-hidden', val !== 'anthropic');
   });
 
-  /* Toggle API key visibility */
   $('#toggle-api-key').on('click', function () {
     const $input = $('[name="merdusseo_ai_api_key"]');
     const isPass = $input.attr('type') === 'password';
@@ -411,7 +536,6 @@
     $(this).text(isPass ? 'Gizle' : 'Göster');
   });
 
-  /* Settings form submit */
   $('#settings-form').on('submit', function (e) {
     e.preventDefault();
 
@@ -419,14 +543,12 @@
     const data  = {};
     const $form = $(this);
 
-    /* Serialize all named fields */
     $form.find('[name]').each(function () {
       const name = $(this).attr('name');
       if ($(this).is(':checkbox')) {
         if (!data[name]) data[name] = [];
         if ($(this).is(':checked')) data[name].push($(this).val());
       } else if ($(this).is('select[id="model-openai"]') || $(this).is('select[id="model-anthropic"]')) {
-        /* Only send the visible one */
         if (!$(this).closest('div').hasClass('mseo-hidden')) {
           data['merdusseo_ai_model'] = $(this).val();
         }

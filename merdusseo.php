@@ -25,6 +25,7 @@ require_once MERDUSSEO_DIR . 'includes/class-link-checker.php';
 require_once MERDUSSEO_DIR . 'includes/class-cannibalization.php';
 require_once MERDUSSEO_DIR . 'includes/class-ai-fixer.php';
 require_once MERDUSSEO_DIR . 'includes/class-csv-handler.php';
+require_once MERDUSSEO_DIR . 'includes/class-gsc.php';
 require_once MERDUSSEO_DIR . 'includes/class-admin.php';
 
 /* ── Lifecycle hooks ──────────────────────────────────────────────────── */
